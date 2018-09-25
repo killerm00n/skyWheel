@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1,user-scalable=no" />
+		<title></title>
+		<style type="text/css">
+			*{margin:0;padding:0;font-size:0;}
+			.container{
+				width:300px;
+				height:300px;
+				background:aliceblue;
+				border-radius:50%;
+				position:relative;
+				margin:50px auto;
+			}
+			.center{
+				position:absolute;
+				left:0;
+				right:0;
+				top:0;
+				bottom:0;
+				margin:auto;
+				width:0;
+				height:0;
+			}
+			.slides{
+				--widths:30px;
+				--heights:30px;
+				font-size:18px;
+				width:var(--widths);
+				height:30px;
+				line-height: 30px;
+				background:#ff6600;
+				text-align: center;
+				position:absolute;
+				left:calc(0px - var(--widths)/2);
+				top:calc(0px - var(--heights)/2);
+				
+			}
+		</style>
+	</head>
+	<body style="height:2000px;">
+		<div class="container">
+			<div class="center">
+				<div class="slides">1</div>
+				<div class="slides">2</div>
+				<div class="slides">3</div>
+				<div class="slides">4</div>
+			</div>
+		</div>
+	</body>
+	<script type="text/javascript">
+		
+		let circleCFG = {
+			container:".container",
+			selector: ".slides",
+			radius: 150,
+			clockSide: true,
+		}
+		/*
+		 * Tween.js
+		 * t: current time（当前时间）；
+		 * b: beginning value（初始值）；
+		 * c: change in value（变化量）；
+		 * d: duration（持续时间）。
+		*/
+		let miniTween = {
+	        easeIn: function(t, b, c, d) {
+	            return c * (t /= d) * t * t + b;
+	        },
+	        easeOut: function(t, b, c, d) {
+	            return c * ((t = t/d - 1) * t * t + 1) + b;
+	        },
+	        easeInOut: function(t, b, c, d) {
+	            if ((t /= d / 2) < 1) return c / 2 * t * t*t + b;
+	            return c / 2*((t -= 2) * t * t + 2) + b;
+	        }
+		}
+		
+		const PI = Math.PI;
+		class DegTool {
+		    constructor() { }
+		    /**
+		     * 计算从圆弧上的点(A)到达圆心(B)的斜率 象限 , 斜率绝对值
+		     */
+		    getK(pointA, pointB) {
+		        let k = 0;
+		
+		        let result = {
+		            x: 0,
+		            y: 0,
+		            k: 0,
+		            absK: 0
+		        };
+		        let disX = pointA.x - pointB.x;
+		        let disY = pointA.y - pointB.y;
+		        result.k = disY / disX;
+		        result.absK = Math.abs(result.k);
+		        /**
+		         * 当两点x坐标相近时 , 不在象限上 而是在Y轴上
+		         */
+		        if (Math.abs(disX) > 0.01) {
+		            result.x = disX > 0 ? 1 : -1;
+		            result.y = disY > 0 ? -1 : 1;
+		        } else if (pointA.y >= pointB.y) { // 18点整
+		            result.x = 0;
+		            result.y = -1;
+		        } else {
+		            result.x = 0;
+		            result.y = 1;
+		        }
+		        return result;
+		    }
+		
+		    /**
+		     *  通过计算圆弧上的点(A)到圆心(B)的斜率 ， 修正返回相应角度 Y轴正向为0度
+		     *
+		     * */
+		    getDeg(pointA, pointB) {
+		        let deg = 0;
+		        // 获取象限 以及斜率
+		        let pos = this.getK(pointA, pointB);
+		        /**
+		         * 加90是为了让Y轴正向为0度 ， 否则 Y轴正向为 -90度
+		         */
+		        deg = Math.round(Math.atan(pos.k) * 180 / PI + 90);
+		        /**
+		         * 由于第三象限第四象限开始计算出的角度会从0开始 ， 所以需要增加180度
+		         */
+		        if (pos.x === -1) {
+		            deg = 180 + deg;
+		        }
+		        return deg;
+		    }
+		}
+		
+		let degTool = new DegTool();
+		
+		let PI2D = Math.PI/180;
+		let translateCircle = {
+			rotate: 0,
+			isAutoRotate: false,
+			clockSide: true,
+			init(cfg){
+				let {
+					con = null,
+					container = null,
+					elements = [],
+					length = -1,
+					degree = 360,
+					rotate = 0,
+					selector = null,
+					radius = 100,
+					clockSide = true
+				} = cfg;
+				//获取元素
+				elements = this.queryElements(container , selector);
+				con = document.querySelector(container);
+				length = elements.length;
+				degree = 360 / length;
+				this.clockSide = clockSide;
+				this.positionOpt = {
+					elements,
+					degree,
+					rotate,
+					radius
+				};
+				// 初始位置
+				this.setPosition(this.positionOpt);
+				this.bindTouch(con , selector);
+			},
+			queryElements(container , selector){
+				if( selector )
+					return Array.prototype.slice.call(document.querySelectorAll(container + " " + selector));
+				return [];
+			},
+			/**
+			 * config: {
+				elements,
+				degree,
+				rotate,
+				radius
+				}
+			 */
+			setPosition(config){
+				let {
+					elements,
+					degree,
+					rotate,
+					radius
+				} = config;
+				let dir = this.clockSide ? 1 : -1;
+				for(let i = 0 , len = elements.length ; i < len ; i++){
+					//							   角度分量 + 旋转角度		，    半径
+					let pos = this.calPosition(-90 + degree * i * dir + rotate , radius);
+					elements[i].style.cssText += `;-webkit-transform:translate(${pos.x}px , ${pos.y}px);`;
+				}
+			},
+			calPosition(degree , radius){
+				let x = radius * Math.cos(PI2D * degree);
+				let y = radius * Math.sin(PI2D * degree);
+				//圆的三角函数公式 hhhhh
+				return {
+					x: x.toFixed(2),
+					y: y.toFixed(2)
+				}
+			},
+			autoRotate(deg , duration){
+				this.isAutoRotate = true;
+				let now = +new Date();
+				let startDeg = this.positionOpt.rotate;
+				let targetDeg = startDeg+deg;
+				
+				let anim = ()=>{
+					let currentDuration = +new Date() - now;
+					if(currentDuration > duration){
+						console.log("break")
+						this.isAutoRotate = false;
+						return ;
+					}
+					this.positionOpt.rotate = startDeg + miniTween.easeOut(currentDuration , 0, deg , duration);
+	//					this.rotate = this.positionOpt.rotate++; 
+					this.setPosition(this.positionOpt);
+					requestAnimationFrame(anim);
+				}
+				requestAnimationFrame(anim);
+			},
+			bindTouch(con , slides){
+				let slideName = slides.split('.')[1];
+				let conPos = {};
+				let deg = false;
+				let disDeg = 0;
+				
+				con.addEventListener("touchstart" , e => {
+					if(this.isAutoRotate){
+						return ;
+					}
+					let isTouchSlide = e.path.find(function(item){
+						return item.classList && item.classList.contains(slideName);
+					});
+					if (!isTouchSlide) return ;
+					conPos = con.getBoundingClientRect();
+					conPos.centerX = conPos.x + conPos.width / 2;
+					conPos.centerY = conPos.y + conPos.height / 2;
+					//存储一次点击时的角度
+					let touch = e.touches[0];
+					let x = touch.clientX;
+					let y = touch.clientY;
+					deg = degTool.getDeg({
+						x: x,
+						y: y
+					},{
+						x: conPos.centerX,
+						y: conPos.centerY
+					});
+				}, 0);
+				
+				con.addEventListener("touchmove" , e => {
+					let isTouchSlide = e.path.find(function(item){
+						return item.classList && item.classList.contains(slideName);
+					});
+					if (!isTouchSlide) return ;
+					e.preventDefault();
+					let touch = e.touches[0];
+					let x = touch.clientX;
+					let y = touch.clientY;
+					// 应当设置的角度
+					let currentDeg = degTool.getDeg({
+						x: x,
+						y: y
+					},{
+						x: conPos.centerX,
+						y: conPos.centerY
+					});
+					// 角度差
+					disDeg = currentDeg - deg;
+					// 角度更新
+					deg = currentDeg;
+					
+					this.positionOpt.rotate = deg;
+					this.setPosition(this.positionOpt);
+				} , 0);
+				con.addEventListener("touchend" , e => {
+					console.log(disDeg , '松手惯性');
+					let isTouchSlide = e.path.find(function(item){
+						return item.classList && item.classList.contains(slideName);
+					});
+					if (!isTouchSlide) return ;
+					//				角度差 * 10		角度差 * 100
+					// 				惯性角度终点		惯性停止用时
+					this.autoRotate(disDeg * 10 ,  Math.min(Math.abs(disDeg * 100) , 3e3));
+				} , 0);
+			}
+		}
+		
+		translateCircle.init(circleCFG);
+//		setTimeout(()=>{
+//			translateCircle.autoRotate();
+//		}, 1e3)
+		
+	</script>
+</html>
